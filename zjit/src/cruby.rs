@@ -854,7 +854,7 @@ impl Display for ID {
 
 /// Produce a Ruby string from a Rust string slice
 pub fn rust_str_to_ruby(str: &str) -> VALUE {
-    unsafe { rb_utf8_str_new(str.as_ptr() as *const _, str.len() as i64) }
+    unsafe { rb_utf8_str_new(str.as_ptr() as *const _, str.len() as _) }
 }
 
 /// Produce a Ruby ID from a Rust string slice
@@ -1086,15 +1086,35 @@ pub fn rb_bug_panic_hook() {
     }));
 }
 
-// Non-idiomatic capitalization for consistency with CRuby code
+// Non-idiomatic capitalization for consistency with CRuby code.
+// On wasm32 (no FLONUM), the special constants have different values than
+// the 64-bit bindings. Override them to match the target platform.
 #[allow(non_upper_case_globals)]
+#[cfg(not(target_arch = "wasm32"))]
 pub const Qfalse: VALUE = VALUE(RUBY_Qfalse as usize);
 #[allow(non_upper_case_globals)]
+#[cfg(not(target_arch = "wasm32"))]
 pub const Qnil: VALUE = VALUE(RUBY_Qnil as usize);
 #[allow(non_upper_case_globals)]
+#[cfg(not(target_arch = "wasm32"))]
 pub const Qtrue: VALUE = VALUE(RUBY_Qtrue as usize);
 #[allow(non_upper_case_globals)]
+#[cfg(not(target_arch = "wasm32"))]
 pub const Qundef: VALUE = VALUE(RUBY_Qundef as usize);
+
+// wasm32 without FLONUM: Qfalse=0x00, Qnil=0x02, Qtrue=0x06, Qundef=0x0a
+#[cfg(target_arch = "wasm32")]
+#[allow(non_upper_case_globals)]
+pub const Qfalse: VALUE = VALUE(0x00);
+#[cfg(target_arch = "wasm32")]
+#[allow(non_upper_case_globals)]
+pub const Qnil: VALUE = VALUE(0x02);
+#[cfg(target_arch = "wasm32")]
+#[allow(non_upper_case_globals)]
+pub const Qtrue: VALUE = VALUE(0x06);
+#[cfg(target_arch = "wasm32")]
+#[allow(non_upper_case_globals)]
+pub const Qundef: VALUE = VALUE(0x0a);
 
 #[allow(unused)]
 mod manual_defs {
@@ -1529,14 +1549,14 @@ pub fn class_has_leaf_allocator(class: VALUE) -> bool {
 /// Interned ID values for Ruby symbols and method names.
 /// See [type@crate::cruby::ID] and usages outside of ZJIT.
 pub(crate) mod ids {
-    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::AtomicUsize;
     /// Globals to cache IDs on boot. Atomic to use with relaxed ordering
     /// so reads can happen without `unsafe`. Synchronization done through
     /// the VM lock.
     macro_rules! def_ids {
         ($(name: $name:ident $(content: $content:literal)?)*) => {
             $(
-                pub static $name: AtomicU64 = AtomicU64::new(0);
+                pub static $name: AtomicUsize = AtomicUsize::new(0);
             )*
 
             pub(crate) fn init() {
@@ -1548,7 +1568,7 @@ pub(crate) mod ids {
 
                     // Lookup and cache each ID
                     $name.store(
-                        unsafe { $crate::cruby::rb_intern2(ptr.cast(), content.len() as _) }.0,
+                        unsafe { $crate::cruby::rb_intern2(ptr.cast(), content.len() as _) }.0 as usize,
                         std::sync::atomic::Ordering::Relaxed
                     );
                 )*
@@ -1611,7 +1631,7 @@ pub(crate) mod ids {
         ($id_name:ident) => {{
             let id = $crate::cruby::ids::$id_name.load(std::sync::atomic::Ordering::Relaxed);
             debug_assert_ne!(0, id, "ids module should be initialized");
-            $crate::cruby::ID(id)
+            $crate::cruby::ID(id as _)
         }}
     }
     pub(crate) use ID;

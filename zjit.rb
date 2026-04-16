@@ -191,6 +191,18 @@ class << RubyVM::ZJIT
     Primitive.rb_zjit_assert_compiles
   end
 
+  # Compile a method to ZJIT HIR and return the iongraph JSON as a String.
+  # The argument should be an UnboundMethod or Method object, or a Proc.
+  # Returns nil if compilation fails.
+  def dump_iongraph(method_or_proc)
+    Primitive.rb_zjit_dump_iongraph_method(method_or_proc)
+  end
+
+  # Enable or disable ZJIT profiling on a method's ISEQ.
+  def profile_method(method_or_proc, enable = true)
+    Primitive.rb_zjit_profile_method(method_or_proc, enable)
+  end
+
   # :stopdoc:
   private
 

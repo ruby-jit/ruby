@@ -51,11 +51,21 @@ impl Profiler {
 }
 
 /// API called from zjit_* instruction. opcode is the bare (non-zjit_*) instruction.
+/// On native, called directly from the generated zjit_* instruction code.
+/// On wasm32, called via the C wrapper in zjit.c to ensure the linker keeps it.
+#[cfg(not(target_arch = "wasm32"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn rb_zjit_profile_insn(bare_opcode: u32, ec: EcPtr) {
     with_vm_lock(src_loc!(), || {
         with_time_stat(profile_time_ns, || profile_insn(bare_opcode as ruby_vminsn_type, ec));
     });
+}
+
+/// Wasm32 version: called from C wrapper, skips vm_lock and time_stat.
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn rb_zjit_profile_insn_impl(bare_opcode: u32, ec: EcPtr) {
+    profile_insn(bare_opcode as ruby_vminsn_type, ec);
 }
 
 /// Profile a YARV instruction
